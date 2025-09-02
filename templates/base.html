@@ -1,0 +1,29 @@
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="/static/styles.css">
+    <title>{{ title or "SchoolBrief" }}</title>
+  </head>
+  <body>
+    <nav>
+      <div class="container">
+        <a href="/">SchoolBrief</a>
+        {% if user %}
+        &nbsp;|&nbsp; <a href="/app">Dashboard</a>
+        &nbsp;|&nbsp; <a href="/settings/family">Settings</a>
+        &nbsp;|&nbsp; <a href="/billing">Billing</a>
+        &nbsp;|&nbsp; <a href="/auth/logout">Logout</a>
+        {% else %}
+        &nbsp;|&nbsp; <a href="/auth/google/start">Sign in with Google</a>
+        {% endif %}
+      </div>
+    </nav>
+    <div class="container">
+      {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

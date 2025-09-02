@@ -1,0 +1,19 @@
+
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Never miss Spirit Day again.</h2>
+    <p>All your school emails — summarized into one clean daily or weekly digest.</p>
+    {% if not user %}
+    <a class="btn" href="/auth/google/start">Sign in with Google</a>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>How it works</h3>
+    <ol>
+      <li>Connect Gmail (read-only)</li>
+      <li>Choose kids, schedule, recipients</li>
+      <li>Relax — we’ll send a concise digest</li>
+    </ol>
+  </div>
+{% endblock %}

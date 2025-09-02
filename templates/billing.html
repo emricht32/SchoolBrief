@@ -1,0 +1,15 @@
+
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Subscription</h2>
+    <p>Current status: <strong>{{ sub.status if sub else "none" }}</strong></p>
+    <p>Recipients included: {{ sub.base_included_recipients if sub else 2 }}. Extra recipients billed at $1 each.</p>
+    <form method="post" action="/billing/checkout" style="display:inline;">
+      <button class="btn">Subscribe</button>
+    </form>
+    <form method="post" action="/billing/portal" style="display:inline;margin-left:8px;">
+      <button class="btn secondary">Manage Billing</button>
+    </form>
+  </div>
+{% endblock %}

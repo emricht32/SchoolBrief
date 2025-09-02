@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Digest Preview ({{ start }} -> {{ end }})</h2>
+    <table>
+      <thead><tr><th>one_liner</th><th>when_ts ({{ pref.timezone }})</th><th>created_at</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.one_liner }}</td>
+            <td>{{ r.when_ts | localtime(pref.timezone) if r.when_ts else '—' }}</td>
+            <td>{{ r.created_at | localtime(pref.timezone) }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3">No items in window.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

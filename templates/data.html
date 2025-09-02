@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Processed Emails & One-Liners</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    details { margin: 10px 0; }
+    summary { cursor: pointer; font-weight: 600; }
+    .email-card { border: 1px solid #e3e3e3; border-radius: 8px; padding: 12px; margin: 12px 0; background: #fff; }
+    .meta { color: #666; font-size: 0.9em; margin-bottom: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85em; }
+    ul { margin: 6px 0 0 18px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef3ff; color: #3b5bdb; font-size: 12px; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Processed Emails & One-Liners</h1>
+    <p><a href="/app">← Back to dashboard</a></p>
+
+    {% if not items %}
+      <p>No processed emails yet.</p>
+    {% else %}
+      {% for it in items %}
+        <div class="email-card">
+          <div class="meta">
+            <span class="mono">{{ it.gmail_msg_id }}</span>
+            <span class="pill">{{ it.processed_at | localtime(tz_name) }}</span>
+          </div>
+          <div>
+            <strong>{{ it.subject }}</strong>
+          </div>
+
+          <details>
+            <summary>{{ it.one_liners|length }} one-liner(s)</summary>
+            {% if it.one_liners %}
+              <ul>
+                {% for ol in it.one_liners %}
+                  <li>
+                    {{ ol.one_liner }}
+                    {% if ol.when_ts %}
+                      <span class="pill">{{ ol.when_ts | localtime(tz_name) }}</span>
+                    {% endif %}
+                    <div class="meta">created {{ ol.created_at | localtime(tz_name) }}</div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="meta">No one-liners saved for this message.</div>
+            {% endif %}
+          </details>
+
+          <details>
+            <summary>Debug</summary>
+            <div class="mono">hash: {{ it.content_hash }}</div>
+          </details>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</body>
+</html>

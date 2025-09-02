@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Welcome, {{ user.name or user.email }}</h2>
+    <p>Family: {{ family.display_name or "—" }}</p>
+    <p>Digest cadence: {{ pref.cadence }} at {{ pref.send_time_local }} ({{ pref.timezone }})</p>
+    {% if sub and sub.status=='trialing' and sub.trial_end %}
+      <p><strong>Trial ends:</strong> {{ sub.trial_end }}</p>
+    {% endif %}
+    <form method="post" action="/app/run-now" style="display:inline">
+      <button type="submit">Run Now</button>
+    </form>
+    <form action="/app/clear-db" method="post" style="display:inline" onsubmit="return confirm('This will delete all one-liners and processed-email markers for your family. Continue?');">
+      <button type="submit">Clear DB (this family)</button>
+    </form>
+    <form action="/data" style="display:inline">
+      <button type="submit">View processed emails & one-liners</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Recent Runs</h2>
+    <ul>
+      {% for r in recent_runs %}
+        <li>
+          {{ r.started_at | localtime(pref.timezone) }}
+          {% if r.ended_at %}
+            -> {{ r.ended_at | localtime(pref.timezone) }}
+          {% endif %}
+          —
+          {% if r.email_sent %}
+            sent ({{ r.items_found }} item{{ 's' if r.items_found != 1 else '' }})
+          {% else %}
+            <span style="color:red;">error</span>
+            {% if r.error %}
+              <pre style="white-space: pre-wrap; color:#a00; font-size:0.9em; margin:0.5em 0;">{{ r.error | e }}</pre>
+            {% endif %}
+          {% endif %}
+        </li>
+      {% else %}
+        <li>No runs yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endblock %}

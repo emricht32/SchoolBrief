@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Activity Sources</h2>
+  <form method="post" action="/settings/sources/add" style="display:grid; gap:8px; max-width:560px">
+    <input name="name" placeholder="Name (e.g., Miller JV Soccer)" required>
+    <input name="category" placeholder="Category (sports, music, club, school)" value="sports">
+    <input name="domains_csv" placeholder="Domains CSV (mymusicstaff.com, teamsnap.com)">
+    <input name="keywords_csv" placeholder="Keywords CSV (soccer,practice,game)">
+    <input name="child_name" placeholder="Child name (optional)">
+    <button type="submit">Add Source</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Existing Sources</h3>
+  <ul>
+    {% for s in rows %}
+      <li>
+        <strong>{{ s.name }}</strong>
+        — {{ s.category }}
+        {% if s.child_name %} ({{ s.child_name }}){% endif %}
+        <br>Domains: {{ s.domains_csv or "—" }}<br>Keywords: {{ s.keywords_csv or "—" }}
+        <form method="post" action="/settings/sources/delete" style="display:inline">
+          <input type="hidden" name="id" value="{{ s.id }}">
+          <button type="submit" onclick="return confirm('Delete {{ s.name }}?')">Delete</button>
+        </form>
+      </li>
+    {% else %}
+      <li>No sources yet.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
