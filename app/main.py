@@ -14,8 +14,6 @@ from .views import router as views_router
 from .billing import router as billing_router
 from .scheduler import start_scheduler
 
-
-
 app = FastAPI()
 add_session_middleware(app)
 

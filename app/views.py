@@ -60,6 +60,12 @@ def _current_user(db: Session, request: Request):
         return None
     return db.query(User).filter_by(email=email).first()
 
+# FastAPI
+from fastapi import FastAPI
+app = FastAPI()
+@app.get("/healthz")
+def healthz(): return {"ok": True}
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request):
     flash = request.query_params.get("flash")

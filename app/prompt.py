@@ -70,6 +70,7 @@ After **This Week**, add:
 
 Return **only** the JSON with the fields: subject, html, and text. Do **not** include your reasoning, parsed tables, or any additional text.
 """
+
 WEEKLY_DIGEST_PROMPT2 = """
 You are generating a parent-friendly weekly email digest from a list of `one_liners`. Each `one_liner` is a short summary of an event, activity, assignment, test, or reminder.
 

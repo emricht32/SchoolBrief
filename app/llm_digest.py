@@ -7,17 +7,6 @@ from .logger import logger
 
 _client = OpenAI()
 
-_SYSTEM_INSTRUCTIONS = (
-    "You are an assistant that prepares a concise, parent-friendly weekly school/activity digest. "
-    "You will receive a JSON array of items with one-line summaries and optional dates/times. "
-    "Your job:\n"
-    "1) Group by date (local) and create clear sections.\n"
-    "2) Deduplicate near-duplicates (e.g., 'Miller Power Hour begins...' vs 'Miller Power Hour starts...').\n"
-    "3) If time is missing, treat it as an all-day note; do not invent times.\n"
-    "4) Keep language simple, helpful, and compact. Avoid promotional/credit-card/marketing content.\n"
-    "5) Output EXACTLY a JSON object with keys: subject, html, text. No extra commentary.\n"
-)
-
 def _safe_json_loads(s: str) -> Dict:
     try:
         return json.loads(s)
