@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Family Settings</h2>
+
+    <form method="post">
+      <label>Family display name</label>
+      <input name="display_name" value="{{ family.display_name or '' }}">
+
+      <label>Recipients (comma-separated emails)</label>
+      <input name="recipients" value="{{ pref.to_addresses or '' }}">
+      <small class="muted">Includes 2 recipients. $1/month for each additional recipient.</small>
+
+      <label>Children</label>
+      <div id="children">
+        {# Existing children (keep original names so your current POST logic still works) #}
+        {% for c in children %}
+          <div class="card child-row" data-existing="1">
+            <div style="display:flex; gap:12px; flex-wrap:wrap">
+              <div style="flex:1; min-width:220px">
+                <label>Name</label>
+                <input name="child_name_{{ loop.index0 }}" value="{{ c.name }}">
+              </div>
+              <div style="flex:1; min-width:140px; position:relative;">
+                <label>Grade</label>
+                <div class="grade-dropdown-wrap">
+                  <button type="button" class="grade-btn" data-grade-btn="child_grade_{{ loop.index0 }}">
+                    {{ c.grade or 'Select' }}
+                  </button>
+                  <div class="grade-dropdown" data-grade-dropdown="child_grade_{{ loop.index0 }}" style="display:none;">
+                    {% set group_name = 'child_grade_' ~ loop.index0 %}
+                    {% for grade in ['K'] + (range(1,13) | list) %}
+                      <label class="grade-option" style="text-align:left;justify-content:flex-start;align-items:flex-start;margin-left:0;">
+                        <input type="radio" name="{{ group_name }}" value="{{ grade }}" {% if c.grade == grade|string %}checked{% endif %} style="margin-right:8px;text-align:left;margin-left:0;">
+                        {{ grade }}
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+              <div style="flex:2; min-width:220px">
+                <label>School</label>
+                <input name="child_school_{{ loop.index0 }}" value="{{ c.school_name or '' }}">
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+
+        {# A single blank "new" row will still be present initially #}
+        <div class="card child-row" data-new="1" data-index="0">
+          <div style="display:flex; gap:12px; flex-wrap:wrap">
+            <div style="flex:1; min-width:220px">
+              <label>Name</label>
+              <input name="child_name_new_0">
+            </div>
+            <div style="flex:1; min-width:100px; position:relative;">
+              <label>Grade</label>
+              <div class="grade-dropdown-wrap">
+                <button type="button" class="grade-btn" data-grade-btn="child_grade_new_0">
+                  Select
+                </button>
+                <div class="grade-dropdown" data-grade-dropdown="child_grade_new_0" style="display:none;">
+                  {% set group_name = 'child_grade_new_0' %}
+                  {% for grade in ['K'] + (range(1,13) | list) %}
+                    <label class="grade-option" style="text-align:left;justify-content:flex-start;align-items:flex-start;margin-left:0;">
+                      <input type="radio" name="{{ group_name }}" value="{{ grade }}" style="margin-right:8px;text-align:left;margin-left:0;">
+                      {{ grade }}
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            <div style="flex:2; min-width:120px">
+              <label>School</label>
+              <input name="child_school_new_0">
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <button type="button" class="btn link" data-remove>&times; remove</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin:8px 0 16px">
+        <button type="button" id="add-child" class="btn">+ Add Child</button>
+      </div>
+
+
+      <label>School domains</label>
+      <div id="domain-manager" class="domain-manager">
+        <input id="domain-input" type="text" placeholder="Type to filter or add domain..." autocomplete="off" style="width:100%;margin-bottom:8px;">
+        <div id="domain-list" class="domain-list" style="max-height:160px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px 0;background:#fafbfc;"></div>
+            <input type="hidden" id="school_domains" name="school_domains" value="{{ pref.school_domains or '' }}">
+        </div>
+      <label>Digest detail level</label>
+      <select name="detail_level" id="detail_level">
+        <option value="full" {% if (pref.detail_level or 'full') == 'full' %}selected{% endif %}>Full</option>
+        <option value="focused" {% if pref.detail_level == 'focused' %}selected{% endif %}>Focused</option>
+      </select>
+      <small class="muted">Controls how much context the weekly digest includes.</small>
+<!-- 
+      <label>Cadence</label>
+      <select name="cadence">
+        <option value="daily" {% if pref.cadence=='daily' %}selected{% endif %}>Daily</option>
+        <option value="weekly" {% if pref.cadence=='weekly' %}selected{% endif %}>Weekly</option>
+      </select>
+ -->
+      <label>Weekly days</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        {% set selected = (pref.days_of_week or '').split(',') %}
+        {% for i, label in [(6,'Sun'),(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri'),(5,'Sat')] %}
+          <label style="display:inline-flex;align-items:left;gap:6px;">
+            <input type="checkbox" name="dow" value="{{ i }}" {% if (selected and (i|string) in selected) %}checked{% endif %}>
+            {{ label }}
+          </label>
+        {% endfor %}
+      </div>
+      <input type="hidden" id="days_of_week" name="days_of_week" value="{{ pref.days_of_week or '' }}">
+      <!-- Send time is now fixed at 7:00 AM -->
+      <input type="hidden" name="send_time_local" value="07:00">
+
+      <label>Timezone</label>
+      {% set current_tz = pref.timezone or default_tz %}
+      {% set us_timezones = [
+        'America/New_York',
+        'America/Chicago',
+        'America/Denver',
+        'America/Phoenix',
+        'America/Los_Angeles',
+        'America/Anchorage',
+        'Pacific/Honolulu'
+      ] %}
+      <select name="timezone" id="timezone">
+        {% if current_tz and current_tz not in us_timezones %}
+          <option value="{{ current_tz }}" selected>{{ current_tz }} (custom)</option>
+        {% endif %}
+        {% for tz in us_timezones %}
+          <option value="{{ tz }}" {% if current_tz == tz %}selected{% endif %}>{{ tz.replace('America/','').replace('Pacific/','') }}</option>
+        {% endfor %}
+      </select>
+
+      <button class="btn" type="submit">Save</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Referrals</h2>
+    <p>Share this link to get 1 month free when a friend subscribes:</p>
+    <code>{{ request.url.scheme }}://{{ request.url.netloc }}/auth/google/start?ref={{ referral_code.code if referral_code else '' }}</code>
+  </div>
+
+  <script>
+    // ------- Grade Dropdown Logic -------
+    document.addEventListener('click', function(e) {
+      // Close all dropdowns if click outside
+      if (!e.target.closest('.grade-dropdown-wrap')) {
+        document.querySelectorAll('.grade-dropdown').forEach(dd => dd.style.display = 'none');
+      }
+    });
+    // Robust grade dropdown logic with event delegation
+    document.addEventListener('click', function(e) {
+      // Dropdown open/close
+      const btn = e.target.closest('.grade-btn');
+      if (btn) {
+        e.stopPropagation();
+        const key = btn.getAttribute('data-grade-btn');
+        const dd = document.querySelector(`.grade-dropdown[data-grade-dropdown="${key}"]`);
+        // Close others
+        document.querySelectorAll('.grade-dropdown').forEach(d => { if (d !== dd) d.style.display = 'none'; });
+        dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
+        return;
+      }
+      // Grade select
+      const radio = e.target.closest('.grade-dropdown input[type="radio"]');
+      if (radio) {
+        // Let browser handle radio group (only one per name)
+        setTimeout(() => {
+          const key = radio.name;
+          const btn = document.querySelector(`.grade-btn[data-grade-btn="${key}"]`);
+          btn.textContent = radio.value;
+          // Hide dropdown
+          const dd = document.querySelector(`.grade-dropdown[data-grade-dropdown="${key}"]`);
+          dd.style.display = 'none';
+        }, 0);
+        return;
+      }
+      // Click outside closes all
+      document.querySelectorAll('.grade-dropdown').forEach(dd => dd.style.display = 'none');
+    });
+    // Keep hidden CSV in sync with checkboxes
+    document.addEventListener('change', () => {
+      const vals = Array.from(document.querySelectorAll('input[name="dow"]:checked')).map(el => el.value);
+      document.getElementById('days_of_week').value = vals.join(',');
+    });
+
+    // ------- Add / remove children (new rows only) -------
+    (function() {
+      const container = document.getElementById('children');
+      const addBtn = document.getElementById('add-child');
+
+      function nextNewIndex() {
+        const news = Array.from(container.querySelectorAll('.child-row[data-new="1"]'));
+        if (news.length === 0) return 0;
+        const indices = news.map(n => parseInt(n.getAttribute('data-index') || '0', 10));
+        const maxIdx = Math.max.apply(null, indices);
+        return maxIdx + 1;
+      }
+
+      function makeNewRow(idx) {
+        const wrap = document.createElement('div');
+        wrap.className = 'card child-row';
+        wrap.setAttribute('data-new', '1');
+        wrap.setAttribute('data-index', String(idx));
+        wrap.innerHTML = `
+          <div style="display:flex; gap:12px; flex-wrap:wrap">
+            <div style="flex:1; min-width:220px">
+              <label>Name</label>
+              <input name="child_name_new_${idx}">
+            </div>
+            <div style="flex:1; min-width:140px">
+              <label>Grade</label>
+              <input name="child_grade_new_${idx}">
+            </div>
+            <div style="flex:2; min-width:220px">
+              <label>School</label>
+              <input name="child_school_new_${idx}">
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <button type="button" class="btn link" data-remove>&times; remove</button>
+          </div>
+        `;
+        return wrap;
+      }
+
+      addBtn.addEventListener('click', () => {
+        const idx = nextNewIndex();
+        container.appendChild(makeNewRow(idx));
+      });
+
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        const row = btn.closest('.child-row[data-new="1"]');
+        if (row) row.remove();
+      });
+    })();
+
+    // ------- Modern Domain Manager -------
+    (function() {
+  // Initial data from Jinja2
+  // Always treat school_domains as a CSV string and split in JS
+  const savedDomains = "{{ pref.school_domains or '' }}".split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const suggestions = JSON.parse('{{ domain_suggestions|default([], true)|tojson }}');
+  // Base list comes from domain_suggestions; include any saved domains not already suggested so user can still uncheck them.
+  let allDomains = Array.from(new Set([...suggestions.map(s => s.toLowerCase()), ...savedDomains])).sort();
+  let selected = new Set(savedDomains);
+
+      const input = document.getElementById('domain-input');
+      const list = document.getElementById('domain-list');
+      const hidden = document.getElementById('school_domains');
+      const sugg = document.getElementById('domain-suggestions');
+      const sortBtn = document.getElementById('sort-domains');
+
+      function renderList(filter = '') {
+        let shown = allDomains;
+        if (filter) {
+          const f = filter.trim().toLowerCase();
+            shown = allDomains.filter(d => d.includes(f));
+        }
+        list.innerHTML = shown.map(domain => {
+          const checked = selected.has(domain) ? 'checked' : '';
+          return `<label style='display:flex;align-items:center;gap:8px;padding:2px 12px;cursor:pointer;text-align:left;'>
+            <input type='checkbox' data-domain='${domain}' ${checked} style='margin-left:0;'>
+            <span style='text-align:left;'>${domain}</span>
+          </label>`;
+        }).join('');
+      }
+
+      function updateHidden() {
+        hidden.value = Array.from(selected).sort().join(', ');
+      }
+
+      input.addEventListener('input', e => {
+        renderList(input.value);
+      });
+
+      // Allow adding a new domain on Enter (normalize + select)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          const raw = input.value.trim().toLowerCase();
+          if (!raw) { e.preventDefault(); return; }
+          // Basic sanitize: strip protocol and leading www.
+          let val = raw.replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/$/,'');
+          // Simple domain validity heuristic
+          const valid = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(val);
+          if (valid) {
+            if (!allDomains.includes(val)) {
+              allDomains.push(val);
+              allDomains.sort();
+            }
+            selected.add(val);
+            updateHidden();
+            renderList('');
+          }
+          input.value = '';
+          e.preventDefault();
+        }
+      });
+
+      list.addEventListener('change', e => {
+        const cb = e.target.closest('input[type="checkbox"][data-domain]');
+        if (!cb) return;
+        const d = cb.getAttribute('data-domain');
+        if (cb.checked) selected.add(d);
+        else selected.delete(d);
+        updateHidden();
+      });
+
+      sugg?.addEventListener('click', e => {
+        const chip = e.target.closest('.chip');
+        if (!chip) return;
+        const d = (chip.getAttribute('data-domain') || '').trim().toLowerCase();
+        if (d && !allDomains.includes(d)) {
+          allDomains.push(d);
+          allDomains.sort();
+        }
+        selected.add(d);
+        renderList(input.value);
+        updateHidden();
+      });
+
+      sortBtn?.addEventListener('click', () => {
+        allDomains.sort();
+        renderList(input.value);
+      });
+
+      // Initial render
+      renderList('');
+      updateHidden();
+    })();
+  </script>
+
+  <style>
+    /* Force left alignment for domain manager and checkboxes */
+    #domain-manager {
+      text-align: left !important;
+    }
+    #domain-list {
+      text-align: left !important;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    #domain-list label {
+      justify-content: flex-start !important;
+      width: auto;
+      min-width: 0;
+    }
+    .grade-dropdown-wrap {
+      position: relative;
+  width: 80px; /* reduced by 40px */
+  min-width: 80px;
+  max-width: 80px;
+    }
+    .grade-btn {
+      width: 100%;
+  min-width: 80px;
+  max-width: 80px; /* match wrapper */
+      padding: 7px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #111;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+    }
+    .grade-btn:after {
+      content: '▼';
+      margin-left: auto;
+      font-size: 12px;
+      color: #888;
+      display: inline-block;
+    }
+    /* Left align any old grade tables */
+    .grade-table {
+      border-collapse: collapse;
+      width: 100%;
+      text-align: left;
+    }
+    .grade-table td, .grade-table th {
+      text-align: left;
+    }
+    .grade-dropdown {
+      position: absolute;
+      left: 0;
+      top: 110%;
+      z-index: 10;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      min-width: 90px;
+      width: 100%; /* Match button width */
+      padding: 4px;
+      display: none;
+      text-align: left;
+      box-sizing: border-box;
+    }
+    .grade-option {
+      display: grid;
+      grid-template-columns: 16px auto;
+      align-items: center;
+      width: 100%;
+      padding: 2px 4px;
+      cursor: pointer;
+      font-size: 14px;
+      text-align: left;
+      box-sizing: border-box;
+      white-space: nowrap;
+      gap: 6px;
+    }
+    .grade-option input[type="radio"] {
+      margin: 0;
+      justify-self: start;
+      align-self: center;
+    }
+    .grade-option input[type="radio"] {
+      margin-right: 8px;
+      margin-left: 0 !important;
+      padding-left: 0 !important;
+      vertical-align: middle;
+      align-self: flex-start;
+      justify-self: flex-start;
+    }
+    .grade-option input[type="radio"] {
+      margin-right: 8px;
+      vertical-align: middle;
+      align-self: flex-start;
+    }
+    .grade-option input[type="radio"] {
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .grade-option input[type="radio"] {
+      margin-right: 8px;
+    }
+    .grade-option:hover {
+      background: #f3f4f6;
+    }
+    .btn {
+      padding:8px 12px;
+      border-radius:6px;
+      border:1px solid #ccc;
+      background:#f9fafb;
+      color:#111;
+      font-size:14px;
+      cursor:pointer;
+    }
+    .btn:hover { background:#e5e7eb; }
+    .btn.link {
+      border:none;
+      background:transparent;
+      color:#2563eb;
+      text-decoration:underline;
+      font-weight:500;
+    }
+    .muted { color:#666; font-size:12px; }
+    .card {
+      padding:12px;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+      margin-bottom:12px;
+      background:#fff;
+    }
+  </style>
+{% endblock %}

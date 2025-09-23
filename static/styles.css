@@ -10,3 +10,99 @@ nav{background:#111827;color:#fff;padding:12px}
 nav a{color:#fff;text-decoration:none;margin-right:16px}
 .flash{background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:8px;border-radius:8px;margin:8px 0}
 small.muted{color:#6b7280}
+/* Hamburger menu styles */
+.nav-flex {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.nav-brand {
+	font-weight: bold;
+	font-size: 1.2em;
+}
+.nav-toggle {
+	display: none;
+	flex-direction: column;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	margin-left: 8px;
+}
+.nav-toggle .bar {
+	width: 28px;
+	height: 4px;
+	background: #fff;
+	margin: 4px 0;
+	border-radius: 2px;
+	display: block;
+}
+/* Desktop nav links */
+.nav-links {
+	display: flex;
+	gap: 16px;
+}
+
+/* Hamburger hidden by default */
+.nav-toggle {
+	display: none;
+}
+
+@media (max-width: 700px) {
+	nav {
+		position: relative;
+		z-index: 1100;
+	}
+	.nav-flex {
+		position: relative;
+	}
+	.nav-toggle {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		margin-left: 8px;
+		z-index: 1200;
+	}
+	.nav-toggle .bar {
+		width: 28px;
+		height: 4px;
+		background: #fff;
+		margin: 4px 0;
+		border-radius: 2px;
+		display: block;
+	}
+	.nav-links {
+		display: none;
+		position: absolute;
+		top: 56px;
+		left: 0;
+		right: 0;
+		background: #111827;
+		flex-direction: column;
+		gap: 0;
+		z-index: 1000;
+		padding: 12px 0;
+		border-bottom-left-radius: 12px;
+		border-bottom-right-radius: 12px;
+	}
+	.nav-links.open {
+		display: flex;
+	}
+	.nav-links a {
+		padding: 12px 24px;
+		margin: 0;
+		border-bottom: 1px solid #222b3a;
+	}
+	.nav-links a:last-child {
+		border-bottom: none;
+	}
+}

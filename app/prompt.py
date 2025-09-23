@@ -89,6 +89,8 @@ You are generating a parent-friendly weekly email digest from a list of `one_lin
 3. Add any items **after** that 7-day window to an **Upcoming** section.
 4. Omit items with a `date_string` **before** `run_date`.
 5. Items in each section are sorted by date and time, ascending.
+6. Items are not duplicated in the same section or across sections
+7. Special consideration should be given to Tests, Homework, and Activities with due dates, registration deadlines or application dates.
 
 ## Parsing & Normalization Rules
 - **Date/time use:** Prefer `date_string` and `time_string` when present. If they’re missing, parse natural-language dates/times in `one_liner`. If no reliable date can be determined, place the item under **General Reminders**.
@@ -146,4 +148,184 @@ After **This Week**, add:
 
 ## Final Instruction
 Return only the JSON with the fields `subject`, `html`, and `text`. Do not include your reasoning, parsed tables, or any additional text.
+"""
+
+WEEKLY_DIGEST_PROMPT3 = """
+You are generating a weekly parent-friendly email digest from a list of `one_liners`. Each `one_liner` is a short summary of an event, assignment, test, activity, or reminder.
+
+**Runtime context:**
+- `{{run_date}}` → ISO local date when script runs (`YYYY-MM-DD`). If not provided, use system clock.
+- `{{timezone}}` → IANA timezone (default: `America/Los_Angeles`).
+- `{{detail_level}}` → one of `focused` or `full`:
+  - `full`: full output per rules below.
+  - `focused`: same as `full` **but omit the entire General Reminders section** (drop undated/unclear items). Also omit items in **Other / Misc** if they do not have a date 
+- `{{one_liners}}` → array of objects:
+  - `one_liner`: string (required)
+  - `date_string`: ISO date `YYYY-MM-DD` (optional)
+  - `time_string`: `h:mm AM/PM` (optional; if missing, treat as all-day)
+  - `domain`: string (optional; sender domain; used for grouping)
+
+---
+
+## Goals
+1. Produce a concise, accurate, skimmable email in **HTML** for parents.
+2. Cover exactly **7 days** from `run_date` (inclusive) → `run_date+6`.
+3. Place future items strictly after that window in **Upcoming**.
+4. Omit all items before `run_date`.
+5. Sort by date → time → student name (if present).
+6. Emphasize Tests, Homework, and items with due dates or registration deadlines.
+7. Avoid duplicates; merge near-identical entries, keep the most complete.
+  - **Example**
+    One Liner 1) Fri, Sep 26 | Friday is a minimum day with early dismissal; students leave campus after period 7 unless in supervised activity
+    One Liner 2) Fri, Sep 26 | Minimum day with early dismissal; students must leave campus after 7th period unless supervised
+    Resulting One Liner: Fri, Sep 26 | Minimum day with early dismissal; students must leave campus after 7th period unless supervised
+8. **Group items by domain** (sender) **within each section**. Use “Other / Unknown” if domain missing.
+
+---
+
+## Parsing & Normalization
+- **Date/Time:** Prefer structured `date_string` / `time_string`. If missing, parse natural-language text. If no reliable date, send to **General Reminders** (but see `detail_level=focused`).
+- **Weekday cross-check:** If text includes weekday + date, recompute actual weekday for that year. Correct silently; if ambiguous, place in **General Reminders** with note “date unclear.”
+- **Recurring/Ongoing (e.g., “starts on 9/2, Mon–Thu 3:15–4:15 PM”):**
+  - Start date ≤ `run_date+6` → **This Week** (include schedule).
+  - Start date > `run_date+6` → **Upcoming** (include start date & schedule).
+- **Student prefixes** (e.g., “Aria: …”) → keep the name and indent as sub-bullet.
+- **Times:** If an explicit time is already in the text (e.g., “by 11:59 PM”), do not add a leading time token. Otherwise, use 12-hour `h:mm AM/PM`.
+- **Domain grouping:** Inside each section (e.g., **Homework & Tests**), create subheadings per domain in alphabetical order. Within each domain, sort items by date, then time, then student name.
+
+---
+
+## Sections & Order
+In **This Week**, include only the sections that have items:
+1. **Events**
+2. **Homework & Tests**
+3. **Activities & Clubs**
+4. **Other / Misc** (omit individual One Liners if they do not contain date information AND `detail_level=focused`)
+
+Then add:
+- **Upcoming** — items strictly after `run_date+6`, grouped by domain, must have date and time information.
+- **General Reminders** — only for undated/unclear items (omit entirely if `detail_level=focused`).
+
+---
+
+## Output Format (strict)
+Return **only JSON** with keys `subject`, `html`, and `text`.
+
+{
+  "subject": "Weekly School Digest: {{Pretty Range run_date … run_date+6}}",
+  "html": "<div>…HTML email content…</div>",
+  "text": "Plain text version"
+}
+
+- HTML: Use `<h2>` for top sections, `<h3>` for domain subheadings, and `<ul>/<li>` for items. Use nested lists for per-student bullets.
+- Text: A plain-text rendering of the HTML structure.
+- If there are no one-liners at all:
+
+{
+  "subject": "SchoolBrief — No Updates This Week",
+  "html": "<p>No updates this week.</p>",
+  "text": "No updates this week."
+}
+
+---
+
+## Validation Checklist (silent)
+- [ ] Filtered to `run_date … run_date+6` for **This Week**; future → **Upcoming**; past omitted.
+- [ ] Weekday corrected to match date for every dated item.
+- [ ] Consistent date/time formatting and timezone applied.
+- [ ] Items grouped by section, then **grouped by domain**, then sorted by date/time/name.
+- [ ] Duplicates merged; ongoing phrasing respected.
+- [ ] Undated/ambiguous → **General Reminders** unless `detail_level=focused` (then omit).
+- [ ] **General Reminders** section entirely omitted when `detail_level=focused`.
+
+## Final Rule
+Return JSON only. No explanations, reasoning, or commentary.
+
+---
+
+## Example Input
+(run_date = `2025-08-25`, timezone = `America/Los_Angeles`, detail_level = `full`)
+
+one_liners = [
+  {
+    "one_liner": "Chapter 1 Science Homework due",
+    "date_string": "2025-08-25",
+    "time_string": "11:59 PM",
+    "domain": "science.ms.example.org"
+  },
+  {
+    "one_liner": "Math Test",
+    "date_string": "2025-09-04",
+    "domain": "math.ms.example.org"
+  },
+  {
+    "one_liner": "AP Test Registration deadline ($125 or $150 fee per test based on test type)",
+    "date_string": "2025-09-30",
+    "domain": "counseling.district.example.org"
+  },
+  {
+    "one_liner": "Remember to bring PE shoes",
+    "domain": "pe.ms.example.org"
+  }
+]
+
+---
+
+## Example Output (detail_level = `full`)
+{
+  "subject": "Weekly School Digest: Mon, Aug 25 – Sun, Aug 31",
+  "html": "<div>
+    <h2>This Week</h2>
+    <h3>Homework &amp; Tests</h3>
+    <h3>science.ms.example.org</h3>
+    <ul>
+      <li>Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due</li>
+    </ul>
+
+    <h2>Upcoming</h2>
+    <h3>Homework &amp; Tests</h3>
+    <h3>math.ms.example.org</h3>
+    <ul>
+      <li>Thu, Sep 4 | Math Test</li>
+    </ul>
+    <h3>counseling.district.example.org</h3>
+    <ul>
+      <li>Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
+    </ul>
+
+    <h2>General Reminders</h2>
+    <h3>pe.ms.example.org</h3>
+    <ul>
+      <li>Remember to bring PE shoes — date not provided/unclear</li>
+    </ul>
+  </div>",
+  "text": "This Week\nHomework & Tests\nscience.ms.example.org\n- Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due\n\nUpcoming\nHomework & Tests\nmath.ms.example.org\n- Thu, Sep 4 | Math Test\ncounseling.district.example.org\n- Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)\n\nGeneral Reminders\npe.ms.example.org\n- Remember to bring PE shoes — date not provided/unclear"
+}
+
+---
+
+## Example Output (detail_level = `focused`)
+{
+  "subject": "Weekly School Digest: Mon, Aug 25 – Sun, Aug 31",
+  "html": "<div>
+    <h2>This Week</h2>
+    <h3>Homework &amp; Tests</h3>
+    <h3>science.ms.example.org</h3>
+    <ul>
+      <li>Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due</li>
+    </ul>
+
+    <h2>Upcoming</h2>
+    <h3>Homework &amp; Tests</h3>
+    <h3>math.ms.example.org</h3>
+    <ul>
+      <li>Thu, Sep 4 | Math Test</li>
+    </ul>
+    <h3>counseling.district.example.org</h3>
+    <ul>
+      <li>Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
+    </ul>
+  </div>",
+  "text": "This Week\nHomework & Tests\nscience.ms.example.org\n- Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due\n\nUpcoming\nHomework & Tests\nmath.ms.example.org\n- Thu, Sep 4 | Math Test\ncounseling.district.example.org\n- Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)"
+}
 """

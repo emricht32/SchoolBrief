@@ -4,21 +4,29 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/nav.js"></script>
     <title>{{ title or "SchoolBrief" }}</title>
   </head>
   <body>
     <nav>
-      <div class="container">
-        <a href="/">SchoolBrief</a>
-        {% if user %}
-        &nbsp;|&nbsp; <a href="/app">Dashboard</a>
-        &nbsp;|&nbsp; <a href="/settings/family">Settings</a>
-        &nbsp;|&nbsp; <a href="/billing">Billing</a>
-        &nbsp;|&nbsp; <a href="/auth/logout">Logout</a>
-        {% else %}
-        &nbsp;|&nbsp; <a href="/auth/google/start">Sign in with Google</a>
-        {% endif %}
+      <div class="container nav-flex">
+        <a href="/" class="nav-brand">SchoolBrief</a>
+        <button class="nav-toggle" aria-label="Open navigation menu" onclick="toggleNavMenu()">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          {% if user %}
+            <a href="/app">Dashboard</a>
+            <a href="/settings">Settings</a>
+            <a href="/billing">Billing</a>
+            <a href="/auth/logout">Logout</a>
+          {% else %}
+            <a href="/auth/google/start">Sign in with Google</a>
+          {% endif %}
+        </div>
       </div>
     </nav>
     <div class="container">

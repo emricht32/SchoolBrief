@@ -1,4 +1,12 @@
+# views.py (top imports)
+import email
+import re
 
+from fastapi import APIRouter, Request, Form, BackgroundTasks
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
+from .models import Family
+from .db import SessionLocal
 import os
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Form
@@ -6,26 +14,30 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from .db import SessionLocal
-# views.py (top imports)
 from .models import (
-    User, Family, Child, DigestRun,
+    User, Family, Child, DigestRun, DigestPreference,
     Subscription, ReferralCode, OneLiner, ProcessedEmail
 )
 from .stripe_sync import ensure_subscription_items
 from urllib.parse import quote_plus
-from .ingest_job import collect_recent_emails, process_recent_emails_saving_to_points
+from .ingest_job import (
+    collect_recent_emails, 
+    process_recent_emails_saving_to_points,
+    process_forwarded_emails_and_update_domains
+)
 from .compile_job import compile_and_send_digest
 from .utils import csv_to_list
 from typing import Dict, List, Tuple
 from sqlalchemy import or_, and_
 from .logger import logger
 from .digest_from_emails import compile_and_send_digest_from_emails
+import pytz
+from .digest_runner import run_digest_once  # ← NEW
 
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
-import pytz
 # from datetime import datetime
 
 def _week_bounds_now(local_tz_name: str, cadence: str) -> Tuple[datetime, datetime]:
@@ -59,12 +71,6 @@ def _current_user(db: Session, request: Request):
     if not email:
         return None
     return db.query(User).filter_by(email=email).first()
-
-# FastAPI
-from fastapi import FastAPI
-app = FastAPI()
-@app.get("/healthz")
-def healthz(): return {"ok": True}
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request):
@@ -113,11 +119,99 @@ def dashboard(request: Request):
         db.close()
 
 
+# @router.post("/app/run-now")
+# def run_now(request: Request):
+#     db = _db()
+#     try:
+#         from .errors import build_error_notice
+#         # print("ONE")
+#         user = _current_user(db, request)
+#         if not user:
+#             return RedirectResponse("/?flash=Please+sign+in", status_code=303)
+
+#         fam = db.query(Family).filter_by(owner_user_id=user.id).first()
+#         if not fam:
+#             return RedirectResponse(
+#                 "/app?flash=" + quote_plus("No family configured"), status_code=303
+#             )
+#         # print("TWO")
+#         pref = fam.prefs
+#         allowed_domains = [
+#             d.strip().lstrip("@").lower()
+#             for d in (pref.school_domains or "").split(",")
+#             if d.strip()
+#         ]
+#          # Job A: process forwarded emails
+#         processed_emails = process_forwarded_emails_and_update_domains(db)
+#         logger.info(f"Processed forwarded emails: {processed_emails}")
+        
+#         to_emails = csv_to_list(pref.to_addresses) or [user.email]
+#         cadence = (pref.cadence or "weekly").lower()
+#         tz = pref.timezone or os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")
+#         # print("THREE")
+#         emails = collect_recent_emails(
+#             db=db,
+#             family_id=fam.id,
+#             allowed_domains=allowed_domains,
+#             days_back=7,
+#         )
+#         if True:
+#             # Job A: ingest last 7 days & create OneLiner rows
+#             processed_count, points_created = process_recent_emails_saving_to_points(
+#                 db,
+#                 fam.id,
+#                 emails,
+#                 local_tz=tz,
+#             )
+#             # print("processed_count=",processed_count)
+#             # print("points_created=",points_created)
+#             # Job B: compile & send a digest from those one-liners
+#             sent, msg = compile_and_send_digest(
+#                 db=db,
+#                 family_id=fam.id,
+#                 to_emails=to_emails,
+#                 cadence=cadence,
+#             )
+
+#             if sent:
+#                 flash = (
+#                     f"Digest sent — processed {processed_count} email(s), "
+#                     f"added {points_created} item(s)."
+#                 )
+#             else:
+#                 flash = (
+#                     f"Digest not sent: {msg} — processed {processed_count} "
+#                     f"email(s), added {points_created} item(s)."
+#                 )
+
+#             return RedirectResponse("/app?flash=" + quote_plus(flash), status_code=303)
+
+#         else:
+#             sent, msg = compile_and_send_digest_from_emails(
+#                 db=db,
+#                 family_id=fam.id,
+#                 to_emails=to_emails,
+#                 cadence=cadence,
+#                 emails=emails,  # ← list of {title, date, text, sender_domain}
+#                 tz_name=tz,
+#             )
+
+#             flash = "Digest sent" if sent else f"Digest not sent: {msg}"
+#             return RedirectResponse("/app?flash=" + quote_plus(flash), status_code=303)
+
+#     except Exception as e:
+#         notice = build_error_notice(e, {"op": "run-now"})
+#         logger.error(f"[{notice.code}] {notice.debug} (ref={notice.support_id})")
+#         return RedirectResponse("/app?flash=" + quote_plus(notice.flash_text()), status_code=303)
+#     finally:
+#         db.close()
+# views.py (imports)
+
 @router.post("/app/run-now")
 def run_now(request: Request):
     db = _db()
     try:
-        logger.debug("")
+        from .errors import build_error_notice
         user = _current_user(db, request)
         if not user:
             return RedirectResponse("/?flash=Please+sign+in", status_code=303)
@@ -127,66 +221,193 @@ def run_now(request: Request):
             return RedirectResponse("/app?flash=" + quote_plus("No family configured"), status_code=303)
 
         pref = fam.prefs
-        allowed_domains = [d.strip().lstrip("@").lower()
-                           for d in (pref.school_domains or "").split(",") if d.strip()]
-        to_emails = csv_to_list(pref.to_addresses) or [user.email]
-        cadence = (pref.cadence or "weekly").lower()
-        tz = pref.timezone or os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")
-        emails = collect_recent_emails(
-                        db=db,
-                        family_id=fam.id,
-                        allowed_domains=allowed_domains,
-                        days_back=7
-                    )
-        if True:
-            # Job A: ingest last 7 days & create OneLiner rows
-        #     process_recent_emails_saving_to_points(
-        # db: Session,
-        # family_id: int,
-        # emails: Dict, 
-        # local_tz: str = "America/Los_Angeles",
-            processed_count, points_created = process_recent_emails_saving_to_points(
-                db,
-                fam.id,
-                emails,
-                local_tz=tz
-                )
-            
-            # Job B: compile & send a digest from those one-liners
-            sent, msg = compile_and_send_digest(
-                db=db,
-                family_id=fam.id,
-                to_emails=to_emails,
-                cadence=cadence,
+        if not pref:
+            return RedirectResponse("/app?flash=" + quote_plus("No preferences configured"), status_code=303)
+
+        # Single call does the whole pipeline
+        sent, msg, metrics = run_digest_once(
+            db=db,
+            family_id=fam.id,
+            pref=pref,
+            user_email_fallback=user.email,  # keeps your original fallback
+            days_back=7,
+        )
+
+        if sent:
+            flash = (
+                f"Digest sent — processed {metrics['processed_count']} email(s), "
+                f"added {metrics['points_created']} item(s)."
             )
-            
-            if sent:
-                flash = f"Digest sent — processed {processed_count} email(s), added {points_created} item(s)."
-            else:
-                flash = f"Digest not sent: {msg} — processed {processed_count} email(s), added {points_created} item(s)."
-
-            return RedirectResponse("/app?flash=" + quote_plus(flash), status_code=303)
         else:
-            sent, msg = compile_and_send_digest_from_emails(
-                                                    db=db,
-                                                    family_id=fam.id,
-                                                    to_emails=to_emails,
-                                                    cadence=cadence,
-                                                    emails=emails,       # ← list of {title, date, text, sender_domain}
-                                                    tz_name=tz,
-                                                )
+            flash = (
+                f"Digest not sent: {msg} — processed {metrics['processed_count']} "
+                f"email(s), added {metrics['points_created']} item(s)."
+            )
 
-            flash = "Digest sent" if sent else f"Digest not sent: {msg}"
-            return RedirectResponse("/app?flash=" + quote_plus(flash), status_code=303)
+        return RedirectResponse("/app?flash=" + quote_plus(flash), status_code=303)
 
     except Exception as e:
-        return RedirectResponse("/app?flash=" + quote_plus(f"Digest not sent: {e}"), status_code=303)
+        notice = build_error_notice(e, {"op": "run-now"})
+        logger.error(f"[{notice.code}] {notice.debug} (ref={notice.support_id})")
+        return RedirectResponse("/app?flash=" + quote_plus(notice.flash_text()), status_code=303)
     finally:
         db.close()
 
 
+@router.get("/app/settings")
+def settings_get(request: Request):
+    db = _db()
+    try:
+        user = _current_user(db, request)
+        if not user:
+            return RedirectResponse("/?flash=Please+sign+in", status_code=303)
 
-@router.get("/settings/family", response_class=HTMLResponse)
+        fam = db.query(Family).filter_by(owner_user_id=user.id).first()
+        if not fam:
+            return RedirectResponse("/app?flash=No+family+configured", status_code=303)
+
+        pref = fam.prefs or DigestPreference(
+            family_id=fam.id,
+            cadence="weekly",
+            send_time_local="07:00",
+            timezone=os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles"),
+        )
+        children = db.query(Child).filter_by(family_id=fam.id).order_by(Child.id.asc()).all()
+        referral_code = db.query(ReferralCode).filter_by(family_id=fam.id).first()
+
+        # If you already pass global domain suggestions, replace this with your real query.
+        domain_suggestions = []  # e.g., ['parentsquare.com','schoology.com']
+
+        return templates.TemplateResponse(
+            "settings.html",
+            {
+                "request": request,
+                "user": user,
+                "family": fam,
+                "pref": pref,
+                "children": children,
+                "referral_code": referral_code,
+                "default_tz": os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles"),
+                "domain_suggestions": domain_suggestions,
+                "welcome": request.query_params.get("welcome") == "1",
+            },
+        )
+    finally:
+        db.close()
+
+
+@router.post("/app/settings")
+async def settings_post(request: Request):
+    db = _db()
+    try:
+        user = _current_user(db, request)
+        if not user:
+            return RedirectResponse("/?flash=Please+sign+in", status_code=303)
+
+        fam = db.query(Family).filter_by(owner_user_id=user.id).first()
+        if not fam:
+            return RedirectResponse("/app?flash=No+family+configured", status_code=303)
+
+        form = await request.form()
+
+        # ---- Family display name ----
+        fam.display_name = (form.get("display_name") or "").strip() or fam.display_name
+        db.add(fam)
+
+        # ---- Preferences (create if missing) ----
+        pref = fam.prefs or DigestPreference(
+            family_id=fam.id,
+            cadence="weekly",
+            send_time_local="07:00",
+            timezone=os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles"),
+        )
+
+        # recipients
+        pref.to_addresses = (form.get("recipients") or "").strip()
+
+        # detail level (full|focused) — default to full
+        dl = (form.get("detail_level") or "full").strip().lower()
+        if dl not in ("full", "focused"):
+            dl = "full"
+        pref.detail_level = dl
+
+        # cadence
+        cad = (form.get("cadence") or "weekly").strip().lower()
+        if cad not in ("daily", "weekly"):
+            cad = "weekly"
+        pref.cadence = cad
+
+        # days of week (hidden CSV kept in sync by JS)
+        pref.days_of_week = (form.get("days_of_week") or "").strip()
+
+        # time & tz
+        pref.send_time_local = (form.get("send_time_local") or "07:00").strip()
+        pref.timezone = (form.get("timezone") or os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")).strip()
+
+        # domains — normalize: lowercase, strip @, dedupe, comma-join
+        raw_domains = (form.get("school_domains") or "")
+        dom_list = [
+            d.lstrip("@").strip().lower()
+            for d in raw_domains.split(",")
+            if d.strip()
+        ]
+        # unique & stable order (alphabetical)
+        dom_list = sorted(set(dom_list))
+        pref.school_domains = ", ".join(dom_list)
+
+        # include keywords
+        pref.include_keywords = (form.get("include_keywords") or "").strip()
+
+        db.add(pref)
+        db.commit()
+
+        # ---- Children ----
+        # Existing children are rendered as child_*_{index} where index matches ordering.
+        children = db.query(Child).filter_by(family_id=fam.id).order_by(Child.id.asc()).all()
+        for idx, child in enumerate(children):
+            name = (form.get(f"child_name_{idx}") or "").strip()
+            grade = (form.get(f"child_grade_{idx}") or "").strip()
+            school = (form.get(f"child_school_{idx}") or "").strip()
+            child.name = name or child.name
+            child.grade = grade or None
+            child.school_name = school or None
+            db.add(child)
+
+        # New children come as child_*_new_{n}
+        # Collect matching indexes by scanning keys
+        new_indexes = set()
+        for k in form.keys():
+            if k.startswith("child_name_new_"):
+                try:
+                    new_indexes.add(int(k.split("_")[-1]))
+                except ValueError:
+                    pass
+
+        for n in sorted(new_indexes):
+            name = (form.get(f"child_name_new_{n}") or "").strip()
+            grade = (form.get(f"child_grade_new_{n}") or "").strip()
+            school = (form.get(f"child_school_new_{n}") or "").strip()
+            if any([name, grade, school]):  # only create if any field filled
+                db.add(Child(
+                    family_id=fam.id,
+                    name=name or "(Unnamed)",
+                    grade=grade or None,
+                    school_name=school or None,
+                ))
+
+        db.commit()
+
+        # Preserve welcome query if present; redirect back with flash
+        qs = "?welcome=1" if request.query_params.get("welcome") == "1" else ""
+        return RedirectResponse(f"/app/settings{qs}&flash=Saved" if qs else "/app/settings?flash=Saved", status_code=303)
+
+    except Exception as e:
+        # Bubble a flash so you can see errors in UI
+        return RedirectResponse(f"/app/settings?flash={str(e)}", status_code=303)
+    finally:
+        db.close()
+
+@router.get("/settings", response_class=HTMLResponse)
 def settings_family(request: Request):
     db = _db()
     try:
@@ -197,13 +418,44 @@ def settings_family(request: Request):
         pref = fam.prefs
         kids = db.query(Child).filter_by(family_id=fam.id).all()
         rc = db.query(ReferralCode).filter_by(family_id=fam.id).first()
-        return templates.TemplateResponse("settings_family.html", {
-            "request": request, "user": user, "family": fam, "children": kids, "pref": pref, "default_tz": os.getenv("DEFAULT_TIMEZONE","America/Los_Angeles"), "referral_code": rc
-        })
+        # views.py (inside the GET handler for settings page)
+        from collections import Counter
+        from sqlalchemy import select
+        from .models import DigestPreference
+
+        # collect all school_domains from all families
+        rows = db.execute(select(DigestPreference.school_domains)).all()
+
+        counter = Counter()
+        for (csv_str,) in rows:
+            if not csv_str:
+                continue
+            # normalize: split csv, trim, lowercase, strip leading '@'
+            doms = {d.strip().lower().lstrip("@") for d in csv_str.split(",") if d.strip()}
+            # count each unique domain once per family pref row
+            for d in doms:
+                counter[d] += 1
+
+        # alphabetize
+        domain_suggestions = [pair[0] for pair in sorted(counter.items(), key=lambda x: x[0])]  # [(domain, count), ...]
+
+        # pass to template
+        ctx = {
+            "family": fam,
+            "pref": pref,
+            "user": user,
+            "children": kids,
+            "default_tz": os.getenv("DEFAULT_TIMEZONE","America/Los_Angeles"),
+            "referral_code": rc,
+            "domain_suggestions": domain_suggestions,  # <— NEW
+            "welcome": request.query_params.get("welcome") == "1",
+        }
+        return templates.TemplateResponse("settings.html", {"request": request, **ctx})
+
     finally:
         db.close()
 
-@router.post("/settings/family")
+@router.post("/settings")
 async def settings_family_post(
     request: Request,
     display_name: str = Form(""),
@@ -228,6 +480,11 @@ async def settings_family_post(
         fam.display_name = display_name or fam.display_name
         pref = fam.prefs
         pref.to_addresses = recipients
+        # Save detail_level (Full vs Focused)
+        dl = (form.get("detail_level") or "full").strip().lower()
+        if dl not in ("full", "focused"):
+            dl = "full"
+        pref.detail_level = dl
         pref.school_domains = school_domains
         pref.include_keywords = include_keywords
         pref.cadence = cadence
@@ -257,7 +514,7 @@ async def settings_family_post(
                 pass
 
         db.commit()
-        return RedirectResponse("/settings/family?flash=Saved", status_code=303)
+        return RedirectResponse("/settings?flash=Saved", status_code=303)
     finally:
         db.close()
 
@@ -398,66 +655,73 @@ def data_preview(request: Request):
     finally:
         db.close()
 
-from fastapi import APIRouter, Request, Form
-from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
-from .models import ActivitySource, Family
-from .db import SessionLocal
+def extract_original_sender_domain(forwarded_email_raw: str) -> str:
+    """
+    Parse the original sender domain from a forwarded email's raw content.
+    This is a simple heuristic; you may want to improve it for your use case.
+    """
+    msg = email.message_from_string(forwarded_email_raw)
+    # Try to find the first 'From:' line in the body (for forwarded content)
+    body = msg.get_payload(decode=True)
+    if not body:
+        body = msg.get_payload()
+    if isinstance(body, bytes):
+        body = body.decode(errors="ignore")
+    match = re.search(r"^From: .*<([^@>]+@([^>]+))>", body, re.MULTILINE)
+    if match:
+        domain = match.group(2).strip().lower()
+        return domain
+    # fallback: try to parse sender from headers
+    from_addr = msg.get('From', '')
+    if '@' in from_addr:
+        domain = from_addr.split('@')[-1].strip().lower()
+        return domain
+    return None
 
-# ... your existing router/templating ...
-
-@router.get("/settings/sources")
-def sources_list(request: Request):
+@router.post("/inbound/forwarded-email")
+async def inbound_forwarded_email(request: Request):
     db = SessionLocal()
     try:
-        user = _current_user(db, request)
-        if not user:
-            return RedirectResponse("/?flash=Please+sign+in")
-        fam = db.query(Family).filter_by(owner_user_id=user.id).first()
-        rows = db.query(ActivitySource).filter_by(family_id=fam.id).order_by(ActivitySource.id.desc()).all()
-        return templates.TemplateResponse("sources.html", {"request": request, "user": user, "family": fam, "rows": rows})
-    finally:
-        db.close()
-
-@router.post("/settings/sources/add")
-async def sources_add(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("school"),
-    domains_csv: str = Form(""),
-    keywords_csv: str = Form(""),
-    child_name: str = Form(""),
-):
-    db = SessionLocal()
-    try:
-        user = _current_user(db, request)
-        if not user:
-            return RedirectResponse("/?flash=Please+sign+in")
-        fam = db.query(Family).filter_by(owner_user_id=user.id).first()
-        db.add(ActivitySource(
-            family_id=fam.id,
-            name=name.strip(),
-            category=category.strip(),
-            domains_csv=domains_csv.strip(),
-            keywords_csv=keywords_csv.strip(),
-            child_name=(child_name or "").strip() or None,
-        ))
-        db.commit()
-        return RedirectResponse("/settings/sources?flash=Added", status_code=303)
-    finally:
-        db.close()
-
-@router.post("/settings/sources/delete")
-async def sources_delete(request: Request, id: int = Form(...)):
-    db = SessionLocal()
-    try:
-        user = _current_user(db, request)
-        if not user:
-            return RedirectResponse("/?flash=Please+sign+in")
-        fam = db.query(Family).filter_by(owner_user_id=user.id).first()
-        row = db.query(ActivitySource).filter_by(family_id=fam.id, id=id).first()
-        if row:
-            db.delete(row); db.commit()
-        return RedirectResponse("/settings/sources?flash=Deleted", status_code=303)
+        data = await request.body()
+        raw_email = data.decode(errors="ignore")
+        # Parse sender (the user who forwarded)
+        msg = email.message_from_string(raw_email)
+        sender = msg.get('From', '').strip().lower()
+        # Find user by sender email or by to_addresses
+        user = db.query(User).filter(User.email == sender).first()
+        fam = None
+        if user:
+            fam = db.query(Family).filter_by(owner_user_id=user.id).first()
+        else:
+            # Try to match sender to any family's to_addresses
+            prefs = db.query(DigestPreference).all()
+            for pref in prefs:
+                if pref.to_addresses:
+                    to_list = [e.strip().lower() for e in pref.to_addresses.split(',') if e.strip()]
+                    if sender in to_list:
+                        fam = db.query(Family).filter_by(id=pref.family_id).first()
+                        break
+        if not fam:
+            return {"ok": False, "reason": "Sender not recognized as user or recipient"}
+        # Extract original sender domain
+        orig_domain = extract_original_sender_domain(raw_email)
+        if not orig_domain:
+            return {"ok": False, "reason": "Could not extract original sender domain"}
+        # Store in DigestPreference.school_domains (CSV)
+        pref = db.query(DigestPreference).filter_by(family_id=fam.id).first()
+        if not pref:
+            return {"ok": False, "reason": "No DigestPreference for family"}
+        domains = []
+        if pref.school_domains:
+            domains = [d.strip().lower() for d in pref.school_domains.split(',') if d.strip()]
+        if orig_domain not in domains:
+            domains.append(orig_domain)
+            pref.school_domains = ','.join(sorted(set(domains)))
+            db.add(pref)
+            db.commit()
+            added = True
+        else:
+            added = False
+        return {"ok": True, "added": added, "domain": orig_domain}
     finally:
         db.close()

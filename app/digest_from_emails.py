@@ -7,8 +7,9 @@ from openai import OpenAI
 
 from .models import DigestRun, Family
 from .emailer import send_email
+from .llm import get_openai
 
-client = OpenAI()
+client = get_openai()
 
 EMAILS_DIGEST_PROMPT = """
 You are generating a parent-friendly weekly email digest directly from raw emails.

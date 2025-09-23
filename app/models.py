@@ -45,7 +45,6 @@ class Family(Base):
 
     runs = relationship("DigestRun", back_populates="family")
 
-
 class Child(Base):
     __tablename__ = "children"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -68,6 +67,7 @@ class ProviderAccount(Base):
 
     user = relationship("User", back_populates="providers")
 
+# app/models.py (or wherever DigestPreference lives)
 class DigestPreference(Base):
     __tablename__ = "digest_prefs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -76,11 +76,15 @@ class DigestPreference(Base):
     send_time_local: Mapped[str] = mapped_column(String(5), default="07:00")
     timezone: Mapped[str] = mapped_column(String(64), default="America/Los_Angeles")
     days_of_week: Mapped[Optional[str]] = mapped_column(String(50))  # CSV "0,2,4"
-    include_keywords: Mapped[Optional[str]] = mapped_column(Text)  # CSV
-    school_domains: Mapped[Optional[str]] = mapped_column(Text)  # CSV
-    to_addresses: Mapped[Optional[str]] = mapped_column(Text)  # CSV
+    include_keywords: Mapped[Optional[str]] = mapped_column(Text)     # CSV
+    school_domains: Mapped[Optional[str]] = mapped_column(Text)       # CSV
+    to_addresses: Mapped[Optional[str]] = mapped_column(Text)         # CSV
+
+    # NEW
+    detail_level: Mapped[str] = mapped_column(String(20), default="full")  # "full" | "focused"
 
     family = relationship("Family", back_populates="prefs")
+
 
 # --- Subscription -------------------------------------------
 class Subscription(Base):
@@ -158,16 +162,3 @@ class OneLiner(Base):
     date_string = Column(String(20), nullable=True)     # e.g. "2025-09-04"
     time_string = Column(String(20), nullable=True)     # e.g. "3:15 PM"
     domain      = Column(String(255), nullable=True)    # e.g. "schoology.com"
-
-
-class ActivitySource(Base):
-    __tablename__ = "activity_sources"
-    id = Column(Integer, primary_key=True)
-    family_id = Column(Integer, ForeignKey("families.id"), nullable=False)
-    kind = Column(String(32), default="domain")     # only 'domain' for now
-    value = Column(String(255), nullable=False)     # the domain
-    label = Column(String(255), default="")
-    enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    family = relationship("Family", backref="activity_sources")

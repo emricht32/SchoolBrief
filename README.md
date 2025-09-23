@@ -50,5 +50,5 @@ stripe listen --forward-to localhost:8000/billing/webhook
 - `/` Landing
 - `/auth/google/start` Sign in
 - `/app` Dashboard
-- `/settings/family` Family settings + referral link
+- `/settings` Family settings + referral link
 - `/billing` Subscribe & manage billing

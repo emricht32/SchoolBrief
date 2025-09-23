@@ -53,7 +53,6 @@ def compile_and_send_digest(
     to_emails: List[str],
     cadence: str = "weekly",
 ) -> Tuple[bool, str]:
-    # logger.debug("$")
     fam = db.query(Family).filter_by(id=family_id).first()
     if not fam:
         return False, "Family not found"
@@ -62,7 +61,6 @@ def compile_and_send_digest(
 
     run = DigestRun(family_id=family_id, started_at=datetime.utcnow(), cadence=cadence)
     db.add(run); db.commit(); db.refresh(run)
-    # logger.debug("$$")
 
     try:
         # Grab this family's one-liners (you can narrow to the upcoming/current week if you prefer)
@@ -96,8 +94,8 @@ def compile_and_send_digest(
             cadence=cadence,
             tz_name=tz_name,
             items=items,
+            detail_level=fam.prefs.detail_level
         )
-        # logger.debug("$$$$")
 
         if not (html and text):
             run.email_sent = False

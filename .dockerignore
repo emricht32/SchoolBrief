@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+
+# Venvs
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Git
+.git
+.gitignore
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Local artifacts / secrets
+.env
+.env.*
+*.sqlite
+*.db
+token.json
+client_secret.json

@@ -3,10 +3,50 @@ import json
 from typing import List, Dict
 from openai import OpenAI
 from .logger import logger
+from .errors import build_error_notice
 from datetime import datetime
 from zoneinfo import ZoneInfo  # Python 3.9+
+import os, httpx
+from functools import lru_cache
 
-client = OpenAI()  # uses OPENAI_API_KEY
+@lru_cache(maxsize=1)
+
+def get_openai():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+
+    # Normalize base URL
+    base_url = os.getenv("OPENAI_BASE_URL")
+    if base_url:
+        base_url = base_url.strip()
+        # Accept either https://api.openai.com or https://api.openai.com/v1
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+        if not base_url.startswith("http"):
+            # If someone set 'api.openai.com' without scheme, fix it
+            base_url = f"https://{base_url}"
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+    else:
+        base_url = "https://api.openai.com/v1"
+
+    logger.debug(f"[LLM] Using OpenAI base_url={base_url}")
+
+    # Optional: quick connectivity sanity check (1s timeout)
+    try:
+        with httpx.Client(timeout=1.0) as hx:
+            hx.get(f"{base_url}/models", headers={"Authorization": f"Bearer {api_key}"})
+    except Exception as e:
+        logger.exception(f"[LLM] Connectivity/base URL check failed for {base_url}: {e}")
+        notice = build_error_notice(e, {"op": "openai.chat"})
+        logger.error(f"[{notice.code}] {notice.debug} (ref={notice.support_id})")
+        # Raise or return a sentinel; your caller decides how to flash/continue
+        raise RuntimeError(notice.flash_text())
+
+    return OpenAI(api_key=api_key, base_url=base_url)
+
+client = get_openai()  # uses OPENAI_API_KEY
 
 _SYSTEM = (
     "You extract concise, parent-friendly action items from school/activity emails. "
@@ -92,21 +132,28 @@ def _coerce_points(obj) -> List[Dict]:
     return out
 
 def summarize_email_to_points(subject: str, body_text: str, domain: str, local_tz: str = "America/Los_Angeles") -> List[Dict]:
-    logger.debug("")
     # run_date = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
     run_date = datetime.now().date().isoformat()
 
     prompt = _USER_TEMPLATE.format(subject=subject or "", body=body_text or "", local_tz=local_tz, run_date=run_date or "", domain=domain)
+    try:
+        logger.debug("calling OpenAI...")
+        resp = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            timeout=30,
+        )
+        logger.debug("resp OK")
+    except Exception as e:
+        notice = build_error_notice(e, {"op": "openai.chat"})
+        logger.error(f"[{notice.code}] {notice.debug} (ref={notice.support_id})")
+        # Raise or return a sentinel; your caller decides how to flash/continue
+        raise RuntimeError(notice.flash_text())
 
-    resp = client.chat.completions.create(
-        # model="gpt-5-mini",
-        model="gpt-4.1-mini",
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
-    )
 
     text = resp.choices[0].message.content or ""
     raw = text.strip()
