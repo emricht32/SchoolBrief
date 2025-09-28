@@ -89,7 +89,7 @@
       <label>School domains</label>
       <div id="domain-manager" class="domain-manager">
         <input id="domain-input" type="text" placeholder="Type to filter or add domain..." autocomplete="off" style="width:100%;margin-bottom:8px;">
-        <div id="domain-list" class="domain-list" style="max-height:160px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px 0;background:#fafbfc;"></div>
+  <div id="domain-list" class="domain-list" style="max-height:160px;overflow-y:auto;border:1px solid var(--color-card-border);border-radius:6px;padding:4px 4px 4px 10px;background:var(--color-card-bg);"></div>
             <input type="hidden" id="school_domains" name="school_domains" value="{{ pref.school_domains or '' }}">
         </div>
       <label>Digest detail level</label>
@@ -270,9 +270,9 @@
         }
         list.innerHTML = shown.map(domain => {
           const checked = selected.has(domain) ? 'checked' : '';
-          return `<label style='display:flex;align-items:center;gap:8px;padding:2px 12px;cursor:pointer;text-align:left;'>
-            <input type='checkbox' data-domain='${domain}' ${checked} style='margin-left:0;'>
-            <span style='text-align:left;'>${domain}</span>
+          return `<label class="domain-item">
+            <input type='checkbox' data-domain='${domain}' ${checked}>
+            <span>${domain}</span>
           </label>`;
         }).join('');
       }
@@ -342,21 +342,19 @@
   </script>
 
   <style>
+    /* Domain chips theming */
+    .chip { background: var(--color-card-bg); border:1px solid var(--color-card-border); color: var(--color-text); }
+    .chip:hover { background: rgba(0,0,0,0.08); }
     /* Force left alignment for domain manager and checkboxes */
     #domain-manager {
       text-align: left !important;
     }
-    #domain-list {
-      text-align: left !important;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    #domain-list label {
-      justify-content: flex-start !important;
-      width: auto;
-      min-width: 0;
-    }
+  #domain-list { text-align:left !important; display:flex; flex-direction:column; align-items:flex-start; padding:2px 2px; }
+  #domain-list label.domain-item { display:inline-flex; justify-content:flex-start; align-items:center; gap:4px; width:auto; background:var(--color-card-bg); color:var(--color-text); padding:2px 0; margin:0; }
+  #domain-list label.domain-item input[type="checkbox"] { margin:0; width:16px; height:16px; }
+  #domain-list label.domain-item span { margin:0 0 0 4px !important; flex:0 0 auto; }
+  /* Remove old generic styles */
+    .domain-item span { display:inline-block; }
     .grade-dropdown-wrap {
       position: relative;
   width: 80px; /* reduced by 40px */
@@ -401,8 +399,8 @@
       left: 0;
       top: 110%;
       z-index: 10;
-      background: #fff;
-      border: 1px solid #ddd;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
       border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       min-width: 90px;
@@ -451,7 +449,7 @@
       margin-right: 8px;
     }
     .grade-option:hover {
-      background: #f3f4f6;
+      background: rgba(0,0,0,0.06);
     }
     .btn {
       padding:8px 12px;
@@ -462,7 +460,7 @@
       font-size:14px;
       cursor:pointer;
     }
-    .btn:hover { background:#e5e7eb; }
+  .btn:hover { background:rgba(0,0,0,0.15); }
     .btn.link {
       border:none;
       background:transparent;
@@ -473,10 +471,10 @@
     .muted { color:#666; font-size:12px; }
     .card {
       padding:12px;
-      border:1px solid #e5e7eb;
+      border:1px solid var(--color-card-border);
       border-radius:8px;
       margin-bottom:12px;
-      background:#fff;
+      background:var(--color-card-bg);
     }
   </style>
 {% endblock %}

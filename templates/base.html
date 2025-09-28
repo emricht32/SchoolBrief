@@ -9,6 +9,16 @@
     <title>{{ title or "SchoolBrief" }}</title>
   </head>
   <body>
+    <script>
+      // Apply stored theme ASAP to avoid FOUC
+      (function(){
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'dark') document.documentElement.classList.add('dark');
+          if (t === 'light') document.documentElement.classList.add('light');
+        } catch(e) {}
+      })();
+    </script>
     <nav>
       <div class="container nav-flex">
         <a href="/" class="nav-brand">SchoolBrief</a>
@@ -26,6 +36,7 @@
           {% else %}
             <a href="/auth/google/start">Sign in with Google</a>
           {% endif %}
+          <button id="theme-toggle" type="button" style="background:none;border:1px solid var(--color-card-border);color:var(--color-nav-text);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;">🌓</button>
         </div>
       </div>
     </nav>
@@ -34,4 +45,24 @@
       {% block content %}{% endblock %}
     </div>
   </body>
+  <script>
+    (function(){
+      const btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      function apply(mode){
+        document.documentElement.classList.remove('dark','light');
+        if(mode) document.documentElement.classList.add(mode);
+        try { localStorage.setItem('theme', mode); } catch(e) {}
+        btn.textContent = mode === 'dark' ? '☀️' : '🌓';
+        btn.setAttribute('aria-label', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      }
+      btn.addEventListener('click', function(){
+        const currentDark = document.documentElement.classList.contains('dark');
+        apply(currentDark ? 'light' : 'dark');
+      });
+      // If nothing stored, prefer system (leave classes as-is so media query works)
+      const stored = localStorage.getItem('theme');
+      if (stored === 'dark' || stored === 'light') apply(stored);
+    })();
+  </script>
 </html>
