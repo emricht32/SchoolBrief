@@ -15,6 +15,8 @@ from .gmail_simple import (
     stable_hash,
 )
 from .gmail_tokens import gmail_service_for_family, GoogleAuthError
+from .emailer import send_reconnect_email
+from .security import encrypt_text
 from .llm import summarize_email_to_points
 from .logger import logger
 from .models import OneLiner, ProcessedEmail, ProviderAccount, Family, DigestPreference, User
@@ -162,10 +164,25 @@ def collect_recent_emails(
             "(e.g. parentsquare.com, schoology.com)."
         )
 
-    # REPLACE with:
     try:
         service = gmail_service_for_family(db, family_id)
     except GoogleAuthError as e:
+        # Attempt recovery: clear the broken token, notify user, and hint they must reconnect.
+        # NOTE: This background job cannot "log the user out" (no request/session context).
+        # Web requests should check for missing provider token and force a reconnect UX.
+        fam_owner = db.query(Family).filter_by(id=family_id).first()
+        if fam_owner:
+            user = db.query(User).filter_by(id=fam_owner.owner_user_id).first()
+            if user:
+                pa = db.query(ProviderAccount).filter_by(user_id=user.id, provider="google").first()
+                if pa and pa.token_json_enc:
+                    pa.token_json_enc = None
+                    db.add(pa); db.commit()
+                # Fire-and-forget email (best effort)
+                try:
+                    send_reconnect_email(user)
+                except Exception:
+                    logger.debug("send_reconnect_email failed during ingest", exc_info=True)
         raise RuntimeError(str(e))
 
 
@@ -211,6 +228,19 @@ def process_recent_emails_saving_to_points(
     try:
         service = gmail_service_for_family(db, family_id)
     except GoogleAuthError as e:
+        # Same recovery logic here: clear token & notify user. See note above re: logout limitations.
+        fam_owner = db.query(Family).filter_by(id=family_id).first()
+        if fam_owner:
+            user = db.query(User).filter_by(id=fam_owner.owner_user_id).first()
+            if user:
+                pa = db.query(ProviderAccount).filter_by(user_id=user.id, provider="google").first()
+                if pa and pa.token_json_enc:
+                    pa.token_json_enc = None
+                    db.add(pa); db.commit()
+                try:
+                    send_reconnect_email(user)
+                except Exception:
+                    logger.debug("send_reconnect_email failed during process_recent_emails", exc_info=True)
         raise RuntimeError(str(e))
     
     for msg in emails:

@@ -71,19 +71,6 @@ def _maybe_refresh_and_persist(db: Session, pa: ProviderAccount, creds: Credenti
 
     return creds
 
-
-def get_google_creds_for_user(db: Session, user_id: int) -> Credentials:
-    """
-    Load, auto-refresh, and persist up-to-date Google Credentials for a user.
-    Raises GoogleAuthError on failure.
-    """
-    pa = _load_provider_account_for_user(db, user_id)
-    if not pa:
-        raise GoogleAuthError("No Google provider account found.")
-    creds = _rehydrate_creds(pa)
-    return _maybe_refresh_and_persist(db, pa, creds)
-
-
 def get_google_creds_for_family(db: Session, family_id: int) -> Credentials:
     """
     Same as above, but looks up the family's owner user.
@@ -93,15 +80,6 @@ def get_google_creds_for_family(db: Session, family_id: int) -> Credentials:
         raise GoogleAuthError("No Google provider account found for family owner.")
     creds = _rehydrate_creds(pa)
     return _maybe_refresh_and_persist(db, pa, creds)
-
-
-def gmail_service_for_user(db: Session, user_id: int):
-    """
-    Convenience: return a ready Gmail API service for the user.
-    """
-    creds = get_google_creds_for_user(db, user_id)
-    return build("gmail", "v1", credentials=creds)
-
 
 def gmail_service_for_family(db: Session, family_id: int):
     """

@@ -1,5 +1,5 @@
 # app/auth.py
-import os, secrets
+import os, secrets, json
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
@@ -10,6 +10,8 @@ from .google_oauth import build_flow, token_json_from_creds
 from .security import encrypt_text
 from .logger import logger
 import requests
+from .schoology import obtain_request_token, build_authorize_url, exchange_access_token, get_or_create_schoology_provider, SchoologyAuthError, PROVIDER_NAME as SCHOOLOGY_PROVIDER
+from .security import encrypt_text
 
 router = APIRouter()
 
@@ -175,3 +177,62 @@ def google_callback(request: Request):
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/?flash=Logged+out")
+
+
+# ---------------- Schoology OAuth (OAuth 1.0a) ----------------
+@router.get("/schoology/start")
+def schoology_start(request: Request):
+    db = _get_db()
+    try:
+        user_email = request.session.get("user_email")
+        if not user_email:
+            return RedirectResponse("/?flash=Please+sign+in")
+        user = db.query(User).filter_by(email=user_email).first()
+        if not user:
+            return RedirectResponse("/?flash=User+not+found")
+        try:
+            rt, rt_secret = obtain_request_token()
+        except SchoologyAuthError as e:
+            return RedirectResponse(f"/app/settings?flash=Schoology+auth+error%3A+{str(e)}")
+        # store in session
+        request.session["sch_oauth_token"] = rt
+        request.session["sch_oauth_token_secret"] = rt_secret
+        auth_url = build_authorize_url(rt)
+        return RedirectResponse(auth_url)
+    finally:
+        db.close()
+
+
+@router.get("/schoology/callback")
+def schoology_callback(request: Request):
+    rt = request.session.get("sch_oauth_token")
+    rt_secret = request.session.get("sch_oauth_token_secret")
+    oauth_token = request.query_params.get("oauth_token")
+    oauth_verifier = request.query_params.get("oauth_verifier")
+    if not (rt and rt_secret and oauth_token and oauth_verifier):
+        return RedirectResponse("/app/settings?flash=Missing+Schoology+tokens")
+
+    if oauth_token != rt:
+        return RedirectResponse("/app/settings?flash=Token+mismatch")
+
+    db = _get_db()
+    try:
+        user_email = request.session.get("user_email")
+        if not user_email:
+            return RedirectResponse("/?flash=Please+sign+in")
+        user = db.query(User).filter_by(email=user_email).first()
+        if not user:
+            return RedirectResponse("/?flash=User+not+found")
+        try:
+            data = exchange_access_token(rt, rt_secret, oauth_verifier)
+        except SchoologyAuthError as e:
+            return RedirectResponse(f"/app/settings?flash=Schoology+exchange+failed%3A+{str(e)}")
+
+        pa = get_or_create_schoology_provider(db, user.id)
+        # store token & secret encrypted in token_json_enc
+        pa.token_json_enc = encrypt_text(json.dumps(data))
+        pa.scopes = ""  # Schoology doesn't use scopes like Google; keep placeholder
+        db.add(pa); db.commit()
+        return RedirectResponse("/app/settings?flash=Schoology+connected", status_code=303)
+    finally:
+        db.close()

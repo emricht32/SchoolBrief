@@ -162,3 +162,27 @@ class OneLiner(Base):
     date_string = Column(String(20), nullable=True)     # e.g. "2025-09-04"
     time_string = Column(String(20), nullable=True)     # e.g. "3:15 PM"
     domain      = Column(String(255), nullable=True)    # e.g. "schoology.com"
+
+
+class SchoologyItem(Base):
+    """Normalized Schoology assignment/event/test.
+
+    We keep it minimal and idempotent so repeated syncs do not duplicate data.
+    """
+    __tablename__ = "schoology_items"
+    id = Column(Integer, primary_key=True)
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=False)
+    provider_account_id = Column(Integer, ForeignKey("provider_accounts.id"), nullable=False)
+    schoology_id = Column(String(64), nullable=False)          # assignment/event id
+    item_type = Column(String(32), nullable=False)             # assignment|event|update|other
+    title = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)
+    due_at = Column(DateTime, nullable=True)                   # UTC converted
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    course_title = Column(String(255), nullable=True)
+    raw_json = Column(Text, nullable=True)                     # debugging/trace
+
+    __table_args__ = (
+        UniqueConstraint("family_id", "schoology_id", name="uix_family_schoology_id"),
+    )

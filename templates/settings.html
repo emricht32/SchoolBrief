@@ -144,6 +144,27 @@
   </div>
 
   <div class="card">
+    <h2>Integrations</h2>
+    <div style="margin-bottom:12px">
+      <h3 style="margin:4px 0">Schoology</h3>
+      {% set sch = None %}
+      {% for p in user.providers %}
+        {% if p.provider == 'schoology' and p.token_json_enc %}
+          {% set sch = p %}
+        {% endif %}
+      {% endfor %}
+      {% if sch %}
+        <p style="margin:4px 0">Connected ✓</p>
+        <a class="btn" href="/auth/schoology/start">Re-connect</a>
+      {% else %}
+        <p style="margin:4px 0">Not connected</p>
+        <a class="btn" href="/auth/schoology/start">Connect Schoology</a>
+      {% endif %}
+      <p class="muted" style="margin-top:8px">Connect to auto-import assignments, tests and calendar events into your digest.</p>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Referrals</h2>
     <p>Share this link to get 1 month free when a friend subscribes:</p>
     <code>{{ request.url.scheme }}://{{ request.url.netloc }}/auth/google/start?ref={{ referral_code.code if referral_code else '' }}</code>

@@ -12,6 +12,7 @@ from .ingest_job import (
     process_recent_emails_saving_to_points,
 )
 from .compile_job import compile_and_send_digest
+from .schoology import sync_schoology, materialize_schoology_items_as_oneliners
 
 DEFAULT_TZ = os.getenv("DEFAULT_TIMEZONE", "America/Los_Angeles")
 
@@ -45,7 +46,8 @@ def run_digest_once(
     """
     Orchestrates: process forwarded → collect recent → create points → compile & send.
     Returns: (sent_ok, message, metrics)
-    metrics keys: processed_forwarded, emails_fetched, processed_count, points_created
+    metrics keys: processed_forwarded, emails_fetched, processed_count, points_created,
+                  schoology_created, schoology_oneliners
     """
     # Preconditions
     to_emails = _resolve_recipients(pref, user_email_fallback)
@@ -79,6 +81,10 @@ def run_digest_once(
         emails=emails,
         local_tz=tz_name,
     )
+
+    # Step B2: Schoology sync
+    sch_sync = sync_schoology(db, family_id)
+    sch_oneliners = materialize_schoology_items_as_oneliners(db, family_id)
     logger.info(
         f"[family_id={family_id}] emails_fetched={len(emails)} "
         f"processed_count={processed_count} points_created={points_created}"
@@ -96,4 +102,6 @@ def run_digest_once(
         "emails_fetched": len(emails),
         "processed_count": int(processed_count or 0),
         "points_created": int(points_created or 0),
+        "schoology_created": int(sch_sync.get("created",0)),
+        "schoology_oneliners": int(sch_oneliners or 0),
     }

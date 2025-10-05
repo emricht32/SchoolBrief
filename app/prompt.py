@@ -184,7 +184,7 @@ You are generating a weekly parent-friendly email digest from a list of `one_lin
 ---
 
 ## Parsing & Normalization
-- **Date/Time:** Prefer structured `date_string` / `time_string`. If missing, parse natural-language text. If no reliable date, send to **General Reminders** (but see `detail_level=focused`).
+- **Date/Time:** Prefer structured `date_string` / `time_string`. If missing, parse natural-language text. If no reliable date, send to **General Reminders** (but see `detail_level=focused`). Date and times should be bold.
 - **Weekday cross-check:** If text includes weekday + date, recompute actual weekday for that year. Correct silently; if ambiguous, place in **General Reminders** with note “date unclear.”
 - **Recurring/Ongoing (e.g., “starts on 9/2, Mon–Thu 3:15–4:15 PM”):**
   - Start date ≤ `run_date+6` → **This Week** (include schedule).
@@ -217,7 +217,7 @@ Return **only JSON** with keys `subject`, `html`, and `text`.
   "text": "Plain text version"
 }
 
-- HTML: Use `<h2>` for top sections, `<h3>` for domain subheadings, and `<ul>/<li>` for items. Use nested lists for per-student bullets.
+- HTML: Use `<h2>` for top sections, `<h3>` for domain subheadings, and `<ul>/<li>` for items. Use nested lists for per-student bullets. Use <strong> for date and times.
 - Text: A plain-text rendering of the HTML structure.
 - If there are no one-liners at all:
 
@@ -279,18 +279,18 @@ one_liners = [
     <h3>Homework &amp; Tests</h3>
     <h3>science.ms.example.org</h3>
     <ul>
-      <li>Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due</li>
+      <li><strong>Mon, Aug 25 • 11:59 PM</strong> | Chapter 1 Science Homework due</li>
     </ul>
 
     <h2>Upcoming</h2>
     <h3>Homework &amp; Tests</h3>
     <h3>math.ms.example.org</h3>
     <ul>
-      <li>Thu, Sep 4 | Math Test</li>
+      <li><strong>Thu, Sep 4</strong> | Math Test</li>
     </ul>
     <h3>counseling.district.example.org</h3>
     <ul>
-      <li>Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
+      <li><strong>Tue, Sep 30</strong> | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
     </ul>
 
     <h2>General Reminders</h2>
@@ -312,18 +312,18 @@ one_liners = [
     <h3>Homework &amp; Tests</h3>
     <h3>science.ms.example.org</h3>
     <ul>
-      <li>Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due</li>
+      <li><strong>Mon, Aug 25 • 11:59 PM</strong> | Chapter 1 Science Homework due</li>
     </ul>
 
     <h2>Upcoming</h2>
     <h3>Homework &amp; Tests</h3>
     <h3>math.ms.example.org</h3>
     <ul>
-      <li>Thu, Sep 4 | Math Test</li>
+      <li><strong>Thu, Sep 4</strong> | Math Test</li>
     </ul>
     <h3>counseling.district.example.org</h3>
     <ul>
-      <li>Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
+      <li><strong>Tue, Sep 30</strong> | AP Test Registration deadline ($125 or $150 fee per test based on test type)</li>
     </ul>
   </div>",
   "text": "This Week\nHomework & Tests\nscience.ms.example.org\n- Mon, Aug 25 • 11:59 PM | Chapter 1 Science Homework due\n\nUpcoming\nHomework & Tests\nmath.ms.example.org\n- Thu, Sep 4 | Math Test\ncounseling.district.example.org\n- Tue, Sep 30 | AP Test Registration deadline ($125 or $150 fee per test based on test type)"

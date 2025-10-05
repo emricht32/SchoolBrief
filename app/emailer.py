@@ -67,3 +67,25 @@ def send_email(subject: str, html: str, text: str, to_addrs: list[str]):
 
     except Exception as e:
         raise RuntimeError(f"Email send failed: {type(e).__name__}: {e}") from e
+
+def send_reconnect_email(user):
+    """Notify a user that their Google connection was lost and they must reconnect."""
+    try:
+        to_addr = getattr(user, 'email', None)
+        if not to_addr:
+            return
+        subject = "Reconnect your Google account to SchoolBrief"
+        text = (
+            "Hi,\n\n"
+            "We couldn't access your Google account because the saved authorization became invalid. "
+            "Please sign back in to SchoolBrief and reconnect Google on the Settings page to resume email digests.\n\n"
+            "https://" + (os.getenv('PUBLIC_BASE_URL', 'localhost:8000').replace('https://','').replace('http://','')) + "/app/settings"\
+        )
+        html = (
+            f"<p>Hi,</p><p>We couldn't access your Google account because the saved authorization became invalid. "
+            f"Please <a href='{os.getenv('PUBLIC_BASE_URL','http://localhost:8000')}/app/settings'>sign back in and reconnect Google</a> to resume your email digests.</p>"
+        )
+        send_email(subject, html, text, [to_addr])
+    except Exception:
+        # Suppress; caller treats email as best-effort
+        logger.debug("send_reconnect_email failed", exc_info=True)

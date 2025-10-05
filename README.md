@@ -52,3 +52,42 @@ stripe listen --forward-to localhost:8000/billing/webhook
 - `/app` Dashboard
 - `/settings` Family settings + referral link
 - `/billing` Subscribe & manage billing
+
+## Schoology Integration
+
+The app can ingest assignments and events from Schoology and include them in weekly/daily digests.
+
+### 1. Environment Variables
+Set the following in `.env` or your deployment platform:
+```
+SCHOOLGY_CONSUMER_KEY=xxxx
+SCHOOLGY_CONSUMER_SECRET=yyyy
+SCHOOLGY_CALLBACK_URL=http://localhost:8000/auth/schoology/callback
+```
+In production set `SCHOOLGY_CALLBACK_URL` to your public `https://.../auth/schoology/callback`.
+
+### 2. Connect
+1. Sign in with Google
+2. Go to Settings → Integrations
+3. Click Connect Schoology and authorize
+
+### 3. Sync Flow
+On each digest run we:
+1. Fetch user sections `/users/me/sections`
+2. For each section fetch assignments and events
+3. Upsert records into `schoology_items`
+4. Create `one_liners` (prefixed source_msg_id `sch_<id>`) if not present
+
+### 4. Metrics
+`run_digest_once` returns:
+```
+schoology_created      # new SchoologyItem rows added this run
+schoology_oneliners    # new OneLiner rows created from Schoology data
+```
+
+### 5. Limitations / Next Steps
+- No pagination/date filtering yet (could add since Schoology supports since parameters)
+- No per-child mapping; all items attributed to family aggregate
+- Does not yet filter by due date range for performance
+- Could add toggle to disable Schoology ingestion per family
+
